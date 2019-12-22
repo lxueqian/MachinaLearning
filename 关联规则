@@ -1,0 +1,78 @@
+import pandas as pd
+from mlxtend.frequent_patterns import apriori
+from mlxtend.frequent_patterns import association_rules
+
+
+# Configuration
+FILE = 'CatalogCrossSell.xls'
+SHEET_NAME = 'Data'
+DROPPED = 'Health Products Division'
+
+# Read the dataset file into a dataframe
+df = pd.read_excel(open(FILE,'rb'), sheet_name=SHEET_NAME)
+
+# Remove the first two columns
+columns = df.columns
+df = df.drop(columns[:2], axis=1) # Now df is one-hot encoded transaction matrix
+
+# ---------- Data Exploration and Preprocessing ----------
+print(df.shape[0]) 
+# output: 4998
+
+for cl in df.columns:
+    count = 0
+    for _ in df[cl]:
+        count += _
+    print(cl + ': ' + str(count))
+'''
+output:
+Clothing Division: 165
+Housewares Division: 1967
+Health Products Division: 4998
+Automotive Division: 674
+Personal Electronics Division: 2336
+Computers Division: 234
+Garden Division: 1360
+Novelty Gift Division: 1137
+Jewelry Division: 1784
+'''
+# Not that 'Health Products Division' is included in all transactions.
+# (The following code gives a justification of this fact)
+# So we won't aquire interesting information
+# if we take it into consideration. Here I decided to remove this column.
+
+for i, _ in enumerate(df['Health Products Division']):
+    if _ != 1:
+        print(i)
+
+df = df.drop(DROPPED, axis=1)
+
+
+# ---------- Association Rules Analysis ----------
+# Metric bound
+MIN_SUPPORT = 0.1
+MIN_LIFT = 1.1
+MIN_CONFIDENCE = 0.6
+
+# Get frequent_itemsets using Apriori algorithm
+frequent_itemsets = apriori(df, min_support=MIN_SUPPORT, use_colnames=True)
+
+# Overview of the result
+rules = association_rules(frequent_itemsets, metric='support', min_threshold=MIN_SUPPORT)
+
+# According to requirements, we are only interested in the situation where 
+# there is only one element on each side of the rule.
+rules['antecedent_len'] = rules['antecedents'].apply(lambda x: len(x))
+rules['consequents_len'] = rules['consequents'].apply(lambda x: len(x))
+rules = rules[ (rules['antecedent_len'] == 1) & \
+               (rules['consequents_len'] ==1)]
+
+# And we only want to consider about "support", "confidence" and "lift"
+rules = rules[['antecedents', 'consequents', 'support', 'confidence', 'lift']]
+
+# Sort by 'support'
+rules_sort_by_support = rules.sort_values(by='support', ascending=False)
+# Sort by 'confidence'
+rules_sort_by_confidence = rules.sort_values(by='confidence', ascending=False)
+# Sort by 'lift'
+rules_sort_by_lift= rules.sort_values(by='lift', ascending=False)
