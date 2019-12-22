@@ -1,0 +1,103 @@
+# coding = utf - 8
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+import matplotlib.patheffects as PathEffects
+
+# 数据归一化
+def normalization(df, columns):
+    for listName in columns:
+        if df[listName].max() != df[listName].min():
+            df[listName] = (df[listName] - df[listName].min()) / (df[listName].max() - df[listName].min())
+    return df
+
+# 进行降维处理,进行数据可视化
+def dimension_Reduction(Data, centers, labels, k, index=None):
+    fig, axes = plt.subplots(1, 1)
+    pca = PCA(n_components=2)
+    new_data = pca.fit_transform(Data)
+    axes.scatter(new_data[:, 0], new_data[:, 1], lw=0, s=40, c=labels, marker='o', alpha=0.5)
+    txts = []
+    for i in range(k):
+        xtext, ytext = np.median(new_data[labels == i, :], axis=0)
+        txt = axes.text(xtext, ytext, str(i), fontsize=20)
+        txt.set_path_effects([
+            PathEffects.Stroke(linewidth=5, foreground="w"),
+            PathEffects.Normal()])
+        txts.append(txt)
+    plt.show()
+
+# 进行k-means聚类
+def kmeans(df, k, drawplt=True):
+    df_drop = df.drop(df.columns[0], axis=1)
+    df_drop = df_drop.drop(df_drop.columns[1], axis=1)
+    data_set = df_drop.as_matrix()
+    kmeans = KMeans(n_clusters=k).fit(data_set)
+
+    pca = PCA(n_components=2)
+    centers_d = pca.fit_transform(centers)
+
+    centers_2 = pd.DataFrame(centers_d)
+    centers_2.to_csv("centers_2.csv", header=0, index=False)
+    labels = kmeans.labels_
+    df['lables'] = kmeans.labels_
+
+    df.to_csv('cluster_label.csv', index=False)
+    inertia = kmeans.inertia_
+
+    if drawplt:
+        dimension_Reduction(data_set, centers_d, labels, k)
+    return inertia
+
+
+def kmeans_k(list):
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    x = []
+    y = []
+    for i in range(len(list)):
+        x.append(list[i][0])
+        y.append(list[i][1])
+    ax.plot(x, y, color="r", linewidth=2)
+    plt.show()
+
+
+data_ALS = pd.read_csv('ALS.csv')
+data_ALS_delID = data_ALS.drop(['ID'], axis=1)  # 去掉“ID”一列
+col_names = list(data_ALS_delID.keys())
+
+data_summary = data_ALS_delID.describe()  # 描述性统计分析
+
+data_summary.to_csv("data_summary.csv")
+data_ALS_delID_Norm = normalization(data_ALS_delID, col_names)
+correlations = data_ALS_delID_Norm.corr()
+correlations.to_csv("correlations.csv")
+correction = abs(correlations)
+fig = plt.figure()
+ax = sns.heatmap(correction, cmap='rainbow', linewidths=0.05, vmax=1, vmin=0, xticklabels=False, yticklabels=False)
+plt.xticks(np.arange(100) + 0.5, col_names)
+plt.yticks(np.arange(100) + 0.5, col_names)
+ax.set_title('Feature correlation')
+plt.savefig('correlations.tif', dpi=300)
+plt.show()
+
+# k-means聚类
+data_Clustering = kmeans(data_ALS_delID_Norm, 10)
+print(data_Clustering)
+
+# 通过Elbow方法，获取最佳拐点（k值）
+list_k = []
+for k in range(2, 50):
+    print('当前聚类数目为：', k)
+    list_k.append([k, kmeans(data_ALS_delID_Norm, k, drawplt=False)])
+print(list_k)
+kmeans_k(list_k)
+
+# center = pd.read_csv('centers_2.csv').as_matrix()
+# print(center)
+# fig = plt.figure()
+# plt.scatter(center[:, 0], center[:, 1], lw=0, s=40, marker='o', alpha=0.5)
+# plt.show()
