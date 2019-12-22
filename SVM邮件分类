@@ -1,0 +1,68 @@
+import os
+import re
+import pandas as pd
+import numpy as np
+from sklearn.utils import shuffle
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.model_selection import cross_val_score
+from sklearn.svm import SVC
+from sklearn import preprocessing
+
+def get_data(wepath):
+    rootdir=os.path.join(wepath)
+    textlist = []
+    for (dirpath,dirnames,filenames) in os.walk(rootdir):
+        for filename in filenames:
+            with open(rootdir+'/'+filename,'rb') as fr:
+                textlist.append(fr.read())
+    return textlist
+
+def stopwordslist():
+    stopwords = [line.strip() for line in open('./data/stopwords_en','r',
+                 encoding='utf-8').readlines()]
+    return stopwords
+
+def text_preprocessing(textlist,stopwords):
+    clean = []
+    sen = ''
+    rstr = r"[0-9\=\(\)\,\/\\\:\*\?\"\<\>\|\'\'\@\#\+\-\.]"
+    for text in textlist:
+        text = re.sub(rstr,' ',str(text))
+        for word in text.split(' '):
+            if len(word)!=0 and word not in stopwords:
+                sen = sen+' '+word
+        clean.append(sen)
+    return clean
+        
+def split_data(l1,l2):
+    all_data = pd.DataFrame(columns = ['text','label'])
+    all_data['text'] = l1+l2
+    all_data['label'] = ['0']*len(l1)+['1']*len(l2) #0代表baseball,1代表hockey
+    all_data = shuffle(all_data)
+    textlist,labellist = all_data['text'].tolist(),all_data['label'].tolist()
+    return textlist,labellist
+
+if __name__ == '__main__':
+    baseball = get_data('./data/baseball')
+    hockey = get_data('./data/hockey')
+    # print(baseball)
+    stopwords = stopwordslist()
+    baseball = text_preprocessing(baseball,stopwords)
+    hockey = text_preprocessing(hockey,stopwords)
+    # print(baseball)
+    textlist,labellist = split_data(baseball,hockey)
+    lb = preprocessing.LabelBinarizer()
+    
+    label = np.array([number[0] for number in lb.fit_transform(labellist)])
+    #tf-idf
+    vectorizer=CountVectorizer()
+    tfidftransformer=TfidfTransformer()
+    tfidf = tfidftransformer.fit_transform(vectorizer.fit_transform(textlist))  # 先转换成词频矩阵，再计算TFIDF值
+    
+    #模型训练
+    svm = SVC(probability=True,random_state=2018,tol=1e-6)  # SVM模型
+    accuracy = cross_val_score(svm, tfidf, label, scoring='accuracy', cv=5)
+    precision = cross_val_score(svm,tfidf, label, scoring='precision', cv=5)
+    recall = cross_val_score(svm, tfidf, label, scoring='recall', cv=5)
+    f1_score = cross_val_score(svm, tfidf, label, scoring='f1', cv=5)
