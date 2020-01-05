@@ -23,3 +23,4 @@ plt.show()
 没有显示界面的话 plt.switch_backend('agg')
 
 7.求列表均值 import numpy as np   np.mean(list) np.median(list)
+
