@@ -1,0 +1,211 @@
+#-*-coding:utf-8-*-
+
+import json
+import os
+import codecs
+import math
+import sys
+import jieba
+import random
+
+reload(sys)
+sys.setdefaultencoding('utf-8')
+
+
+# 改进：https://blog.csdn.net/fyfmfof/article/details/44034401
+
+def get_file_path(filepath):  # 遍历文件夹中的所有文件，返回文件list
+    arr = []
+    for root, dirs, files in os.walk(filepath):
+        for fn in files:
+            arr.append(root+"\\"+fn)
+    return arr
+
+def get_custom_stopwords(stop_words_file):
+    with open(stop_words_file) as f:
+        stopwords = f.read()
+
+    stopwords_list = stopwords.split('\n')
+    custom_stopwords_list = [i for i in stopwords_list]
+
+    return custom_stopwords_list
+
+def chinese_word_cut_stopwords(mytext, stop_words_file):
+    stopwords = get_custom_stopwords(stop_words_file)
+    word_list = " ".join(jieba.cut(mytext)).split(' ')
+
+    keywords = []
+    for word in word_list:
+        if word not in stopwords and len(word)>1:
+            keywords.append(word)
+
+    return keywords
+
+def data_prepare(file, stop_words_file):  # 读取txt文件，并返回list
+    data_list = []
+    count = 0
+    with open(file,'r') as f:
+        for line in f.readlines():
+            text_cut = chinese_word_cut_stopwords(line.strip(), stop_words_file)
+            data_list.append(text_cut)
+            count += 1
+
+    return count, data_list
+
+def corpus(filelist, stop_words_file):  # 建立语料库
+    corpus_list = []
+    length_list = []
+    for file in filelist:
+        length, data = data_prepare(file, stop_words_file)
+        length_list.append(length)
+        corpus_list.append(data)
+        
+    return length_list, corpus_list
+
+def freqword(wordlis):  # 统计词频，并返回字典
+    freword = {}
+    for line in wordlis:
+        for word in line:
+            if freword.has_key(word):
+                freword[word] += 1
+            else:
+                freword[word] = 1
+
+    return freword
+
+def wordinfilecount(word, corpuslist):  # 查出包含该词的文档数
+    count_list = []     
+    for corpus in corpuslist:
+        count = 0
+        for line in corpus:
+            if word in line:  # 只要文档出现该词，这计数器加1，所以这里用集合
+                count = count+1
+            else:
+                continue
+        count_list.append(count)  
+          
+    return count_list
+
+def tf_idf(i, corpuslist, lengthlist):  # 计算TF-IDF,并返回字典
+    tfidf_dict = {}
+    tf = 0
+    idf = 0
+    corpus = corpuslist[i]
+    corpus_dict = freqword(corpus)
+
+    for line in corpus:
+        for word in line:
+            count_list = wordinfilecount(word, corpuslist)
+            tf = float(corpus_dict[word])/len(corpus)
+            idf = math.log(count_list[i]*sum(lengthlist)/(sum(count_list)+0.01))
+            tfidf = tf*idf
+            tfidf_dict[word] = tfidf
+
+    order_tfidf_dict = sorted(tfidf_dict.items(), key=lambda x: x[1], reverse=True)  # 给字典排序
+
+    return order_tfidf_dict
+
+def data_preprocess_for_LIBSVM(filelist, dic_word,corpuslist,lengthlist):
+    for i in range(len(filelist)):      #转变数据格式，可以作为libsvm的输入
+        print filelist[i].split('\\')[-1],'begin'
+        tfidfdic = tf_idf(i, corpuslist, lengthlist)  # 计算TF-IDF
+ 
+        if str(filelist[i].split('\\')[-1]).startswith('9') or str(filelist[i].split('\\')[-1]).startswith('10'):
+            with codecs.open('globelword.txt','a',encoding='utf-8') as f:  #baseball
+                f.write('0 ')  
+                for term in tfidfdic: 
+                    f.write(str(dic_word[term[0]]) + ':' + str(term[1]) + ' ')
+                f.write('\n')
+        if str(filelist[i].split('\\')[-1]).startswith('5'):   #hockey
+            with codecs.open('globelword.txt','a',encoding='utf-8') as f:
+                f.write('1 ')
+                for term in tfidfdic:
+                    f.write(str(dic_word[term[0]]) + ':' + str(term[1]) + ' ')
+                f.write('\n')
+
+        print filelist[i].split('\\')[-1] +' finished'
+
+    with open('globelword.txt') as f: #打乱数据的顺序
+        ff = f.readlines()
+        random.shuffle(ff)
+        with open('globelword.txt','w') as fff:
+            for term in ff:
+                fff.write(term)
+    
+    with open('globelword.txt') as f:  #把数据分成5份
+        file = f.readlines()
+        for i in range(0,5):
+            # print i
+            with open('S'+ str(i)+".txt","w") as f1:
+                # print 1111
+                # print file
+                for num,line in enumerate(file):
+                    # print 2222
+                    # print i*a ,i*a+a
+                    if num < i*a:
+                        continue
+                    if num >= i*a and num < i*a+a:
+                        f1.write(line)
+                    if num>= i*a+a:
+                        break
+    return "data processed over"
+
+def data_preprocess_for_SMO(filelist, dic_word,corpuslist,lengthlist):
+    mail_list = []
+    label_list = []
+    tfidf_dic = {}
+    for i in range(len(filelist)):      #转变数据格式，可以作为SMO的输入
+        each_mail_list = []
+        print filelist[i].split('\\')[-1],'begin'
+        tfidfdic = tf_idf(i, corpuslist, lengthlist) 
+        tfidflist =[term[0] for term in tfidfdic]
+        for item in tfidfdic:
+            tfidf_dic[item[0]]=item[1]
+        for j in range(len(dic_word)):
+            word = list (dic_word.keys()) [list (dic_word.values()).index (j)]
+            if word not in tfidflist:
+                each_mail_list.append(0)
+            else:
+                each_mail_list.append(tfidf_dic[word])
+
+        mail_list.append(each_mail_list)
+
+        if str(filelist[i].split('\\')[-1]).startswith('9') or str(filelist[i].split('\\')[-1]).startswith('10'):
+            label_list.append(0)
+        if str(filelist[i].split('\\')[-1]).startswith('5'):   #hockey
+            label_list.append(1)
+
+        print filelist[i].split('\\')[-1] +' finished' 
+
+    # print mail_list,label_list
+    with open("globelwordSMO.txt", "w") as f:  #把结果存入TXT中
+        f.write(str(mail_list) + "\n" + str(label_list))    
+
+    return "finished"
+
+def main():
+    stop_words_file = 'stopword.txt'    #停用词表路径
+    filepath = 'data'
+    filelist = get_file_path(filepath)  # 获取文件列表
+    print len(filelist)
+    lengthlist,corpuslist = corpus(filelist, stop_words_file)  # 建立语料库 行数
+    a = len(filelist)/5
+    print a
+    print lengthlist
+    print corpuslist
+
+    set_word = set()        # 建立所有词汇的序数表
+    for lis in corpuslist:
+        for line in lis:
+            for word in line:
+                set_word.add(word)
+    dic_word = {}
+    for i,word in enumerate(set_word):
+        dic_word[word] = i
+    # print dic_word
+#    data_preprocess_for_LIBSVM(filelist, dic_word,corpuslist,lengthlist)                
+    data_preprocess_for_SMO(filelist, dic_word,corpuslist,lengthlist)
+
+if __name__ == '__main__':
+    main()
+
