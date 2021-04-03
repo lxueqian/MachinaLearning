@@ -1,2 +1,5 @@
 # sklearn_learning
-study sklearn doc records
+哈喽！这里是之前学校或者项目里面练习的一些有关不同机器学习算法的小案例
+
+使用方法建议：
+  闲来无事随便翻翻，作为算法学习的复习巩固哈哈哈
